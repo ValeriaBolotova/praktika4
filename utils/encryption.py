@@ -3,6 +3,7 @@ import string
 ALPHABET_EN = string.ascii_uppercase + string.digits + ".,(...)"
 ALPHABET_RU = "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ0123456789.,(...)"
 
+
 def get_alphabet(language):
     if language == "en":
         return ALPHABET_EN
@@ -10,6 +11,7 @@ def get_alphabet(language):
         return ALPHABET_RU
     else:
         raise ValueError("Unsupported language")
+
 
 def vigenere_encrypt(plain_text, key, alphabet):
     plain_text = ''.join(filter(lambda x: x in alphabet, plain_text.upper()))
@@ -30,6 +32,7 @@ def vigenere_encrypt(plain_text, key, alphabet):
 
     return ''.join(cipher_text)
 
+
 def vigenere_decrypt(cipher_text, key, alphabet):
     cipher_text = ''.join(filter(lambda x: x in alphabet, cipher_text.upper()))
     key = key.upper()
@@ -49,6 +52,7 @@ def vigenere_decrypt(cipher_text, key, alphabet):
 
     return ''.join(plain_text)
 
+
 def shift_encrypt(plain_text, shift, alphabet):
     plain_text = ''.join(filter(lambda x: x in alphabet, plain_text.upper()))
     cipher_text = []
@@ -63,6 +67,7 @@ def shift_encrypt(plain_text, shift, alphabet):
 
     return ''.join(cipher_text)
 
+
 def shift_decrypt(cipher_text, shift, alphabet):
     cipher_text = ''.join(filter(lambda x: x in alphabet, cipher_text.upper()))
     plain_text = []
@@ -76,3 +81,21 @@ def shift_decrypt(cipher_text, shift, alphabet):
             plain_text.append(char)
 
     return ''.join(plain_text)
+
+
+def break_shift_cipher(cipher_text, alphabet):
+    results = []
+    cipher_text = ''.join(filter(lambda x: x in alphabet, cipher_text.upper()))
+
+    for shift in range(len(alphabet)):
+        decrypted_text = []
+        for char in cipher_text:
+            if char in alphabet:
+                cipher_index = alphabet.index(char)
+                plain_index = (cipher_index - shift) % len(alphabet)
+                decrypted_text.append(alphabet[plain_index])
+            else:
+                decrypted_text.append(char)
+        results.append(''.join(decrypted_text))
+
+    return results

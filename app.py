@@ -1,63 +1,59 @@
 from flask import Flask, request, jsonify
-from utils.encryption import vigenere_encrypt, vigenere_decrypt, shift_encrypt, shift_decrypt, get_alphabet
-import datetime
+from flask_sqlalchemy import SQLAlchemy
+from utils.encryption import vigenere_encrypt, vigenere_decrypt, shift_encrypt, shift_decrypt, get_alphabet, break_shift_cipher
+from datetime import datetime
+from models import db, User, Session
+import json
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///encryption_service.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
 
-users = []
+with app.app_context():
+    db.create_all()
+
 methods = [
     {"id": 1, "name": "vigenere", "caption": "Vigenere Cipher", "params": {"key": "str"},
      "description": "Шифрование методом Виженера"},
     {"id": 2, "name": "shift", "caption": "Shift Cipher", "params": {"shift": "int"},
      "description": "Шифрование методом сдвига"}
 ]
-sessions = []
-
 
 def is_unique_login(login):
-    return all(user['login'] != login for user in users)
-
+    return User.query.filter_by(login=login).first() is None
 
 def is_unique_secret(secret):
-    return all(user['secret'] != secret for user in users)
-
+    return User.query.filter_by(secret=secret).first() is None
 
 @app.route('/users', methods=['POST'])
 def add_user():
     data = request.json
     if not is_unique_login(data['login']) or not is_unique_secret(data['secret']):
         return jsonify({"error": "Login or Secret must be unique"}), 400
-    user = {
-        "id": len(users) + 1,
-        "login": data["login"],
-        "secret": data["secret"]
-    }
-    users.append(user)
-    return jsonify(user), 201
-
+    user = User(login=data["login"], secret=data["secret"])
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"id": user.id, "login": user.login}), 201
 
 @app.route('/users', methods=['GET'])
 def list_users():
-    return jsonify([{"login": user["login"], "id": user["id"]} for user in users]), 200
-
+    users = User.query.all()
+    return jsonify([{"login": user.login, "id": user.id} for user in users]), 200
 
 @app.route('/users/<int:user_id>', methods=['DELETE'])
 def delete_user(user_id):
-    user = next((u for u in users if u["id"] == user_id), None)
+    user = User.query.get(user_id)
     if user:
-        users.remove(user)
-        # Удалить все сессии, связанные с этим пользователем
-        global sessions
-        sessions = [session for session in sessions if session["user_id"] != user_id]
+        db.session.delete(user)
+        db.session.commit()
         return jsonify({"status": "deleted"}), 200
     else:
         return jsonify({"error": "User not found"}), 404
 
-
 @app.route('/methods', methods=['GET'])
 def list_methods():
     return jsonify(methods), 200
-
 
 @app.route('/sessions', methods=['POST'])
 def create_session():
@@ -78,7 +74,7 @@ def create_session():
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    start_time = datetime.datetime.now()
+    start_time = datetime.now()
 
     if method["name"] == "vigenere":
         key = params.get("key")
@@ -95,44 +91,87 @@ def create_session():
     else:
         return jsonify({"error": "Unknown method"}), 400
 
-    end_time = datetime.datetime.now()
+    end_time = datetime.now()
     elapsed_time = (end_time - start_time).total_seconds()
 
-    session = {
-        "id": len(sessions) + 1,
-        "user_id": user_id,
-        "method_id": method_id,
-        "data_in": text,
-        "params": params,
-        "data_out": result_text,
-        "status": "completed",
-        "created_at": start_time.isoformat(),
-        "time_out": elapsed_time
-    }
-    sessions.append(session)
-    return jsonify(session), 201
+    session = Session(
+        user_id=user_id,
+        method_id=method_id,
+        data_in=text,
+        params=json.dumps(params),
+        data_out=result_text,
+        status="completed",
+        created_at=start_time,
+        time_out=elapsed_time
+    )
+    db.session.add(session)
+    db.session.commit()
 
+    return jsonify({
+        "id": session.id,
+        "user_id": session.user_id,
+        "method_id": session.method_id,
+        "data_in": session.data_in,
+        "params": session.params,
+        "data_out": session.data_out,
+        "status": session.status,
+        "created_at": session.created_at.isoformat(),
+        "time_out": session.time_out
+    }), 201
 
 @app.route('/sessions', methods=['GET'])
 def list_sessions():
-    return jsonify(sessions), 200
-
+    sessions = Session.query.all()
+    return jsonify([{
+        "id": session.id,
+        "user_id": session.user_id,
+        "method_id": session.method_id,
+        "data_in": session.data_in,
+        "params": session.params,
+        "data_out": session.data_out,
+        "status": session.status,
+        "created_at": session.created_at.isoformat(),
+        "time_out": session.time_out
+    } for session in sessions]), 200
 
 @app.route('/sessions/<int:session_id>', methods=['DELETE'])
 def delete_session(session_id):
     data = request.json
     secret = data.get("secret")
 
-    session = next((s for s in sessions if s["id"] == session_id), None)
+    session = Session.query.get(session_id)
     if session:
-        user = next((u for u in users if u["id"] == session["user_id"]), None)
-        if user and user["secret"] == secret:
-            sessions.remove(session)
+        user = User.query.get(session.user_id)
+        if user and user.secret == secret:
+            db.session.delete(session)
+            db.session.commit()
             return jsonify({"status": "deleted"}), 200
         else:
             return jsonify({"error": "Invalid secret"}), 403
     else:
         return jsonify({"error": "Session not found"}), 404
+
+@app.route('/break', methods=['POST'])
+def break_cipher():
+    data = request.json
+    method_id = data.get("method_id")
+    text = data.get("text")
+    language = data.get("language", "en")
+
+    method = next((m for m in methods if m["id"] == method_id), None)
+    if not method:
+        return jsonify({"error": "Unknown method"}), 400
+
+    try:
+        alphabet = get_alphabet(language)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    if method["name"] == "shift":
+        possible_texts = break_shift_cipher(text, alphabet)
+        return jsonify({"possible_texts": possible_texts}), 200
+    else:
+        return jsonify({"error": "Breaking this cipher is not supported"}), 400
 
 
 if __name__ == '__main__':

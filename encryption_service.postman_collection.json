@@ -405,6 +405,37 @@
                 }
             },
             "response": []
-        }
+        },
+        {
+        "name": "Break Shift Cipher",
+        "request": {
+            "method": "POST",
+            "header": [
+                {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                }
+            ],
+            "body": {
+                "mode": "raw",
+                "raw": "{\n    \"method_id\": 2,\n    \"text\": \"KHOOR\",\n    \"language\": \"en\"\n}"
+            },
+            "url": {
+                "raw": "http://127.0.0.1:5000/break",
+                "protocol": "http",
+                "host": [
+                    "127",
+                    "0",
+                    "0",
+                    "1"
+                ],
+                "port": "5000",
+                "path": [
+                    "break"
+                ]
+            }
+        },
+        "response": []
+    }
     ]
 }

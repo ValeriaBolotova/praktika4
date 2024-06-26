@@ -9,7 +9,7 @@
 
 1. Склонируйте репозиторий:
     ```bash
-    git clone <URL вашего репозитория>
+    git clone https://github.com/ValeriaBolotova/praktika4.git
     ```
 2. Перейдите в папку проекта:
     ```bash
